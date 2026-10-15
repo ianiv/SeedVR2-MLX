@@ -139,8 +139,9 @@
         <div class="zoom-bar">
           <span class="zoom-label" id="zoom-level">100%</span>
           <button type="button" class="btn icon" onclick="resetZoom()" title="Reset zoom">↺</button>
+          <button type="button" class="btn icon" id="zoom-native" onclick="toggleNativeZoom()" title="Actual pixels (1 image pixel = 1 screen pixel) · press again to fit">1:1</button>
         </div>
-        <p class="hint cmp-controls"><b>Controls</b> — Scroll = zoom · Drag = pan (when zoomed) · Click / drag the ⇔ handle = move slider · Double-click = reset</p>
+        <p class="hint cmp-controls"><b>Controls</b> — Scroll = zoom · Drag = pan (when zoomed) · Click / drag the ⇔ handle = move slider · Double-click = reset · 1:1 = actual pixels</p>
         <div id="comparison" class="comparison" style="display:none">
           <div class="cmp-zoom-wrapper" id="cmp-zoom">
             <img id="cmp-before" class="cmp-img" alt="Original">

@@ -252,7 +252,29 @@ function applyZoom() {
   wrapper.style.transform = s === 1 ? "" : `scale(${s}) translate(${zoomPanX}px, ${zoomPanY}px)`;
   // Counter-scale the knob so it stays a constant size on screen.
   if (knob) knob.style.transform = `translate(-50%, -50%) scale(${1 / s})`;
-  $("#zoom-level").textContent = `${Math.round(s * 100)}%`;
+  const native = Math.abs(s - nativeZoom()) < 0.01;
+  $("#zoom-level").textContent = `${Math.round(s * 100)}%` + (native ? " · 1:1" : "");
+  $("#zoom-native").classList.toggle("active", native);
+}
+
+// Zoom at which one pixel of the upscaled image maps to one physical screen pixel
+// (devicePixelRatio accounts for Retina). Never below 1 — zooming out past fit
+// isn't supported.
+function nativeZoom() {
+  const img = $("#cmp-after");
+  // offsetWidth is the layout width at fit, unaffected by the zoom transform.
+  if (!img?.naturalWidth || !img.offsetWidth) return 1;
+  return Math.max(1, img.naturalWidth / (img.offsetWidth * (window.devicePixelRatio || 1)));
+}
+
+// Jump to actual pixels around the current view centre, or back to fit if already there.
+function toggleNativeZoom() {
+  const n = nativeZoom();
+  if (Math.abs(zoomLevel - n) < 0.01) return resetZoom();
+  // Pan is in pre-scale units, so keeping it keeps the same image point centred.
+  zoomLevel = n;
+  clampPan();
+  applyZoom();
 }
 
 function resetZoom() {
@@ -344,7 +366,7 @@ function setupZoom() {
     const rect = cmpRect();
     if (!rect || rect.width === 0) return;
     const s = zoomLevel;
-    const s2 = Math.max(1, Math.min(8, s + (e.deltaY > 0 ? -0.25 : 0.25)));
+    const s2 = Math.max(1, Math.min(Math.max(8, nativeZoom()), s + (e.deltaY > 0 ? -0.25 : 0.25)));
     if (s2 === s) return;
     // Keep the image point under the cursor fixed while zooming.
     const cx = e.clientX - rect.left;
