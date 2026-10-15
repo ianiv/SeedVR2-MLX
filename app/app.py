@@ -72,6 +72,7 @@ DEFAULT_MODEL = "SeedVR2-7B-mlx-int8"
 
 MODELS_DIR = Path(__file__).parent / "models"
 OUTPUT_DIR = Path(__file__).parent / "outputs"
+ORIGINALS_DIR = OUTPUT_DIR / "originals"  # source images kept for the Library's compare view
 UPLOAD_DIR = Path(__file__).parent / "uploads"
 STATIC_DIR = Path(__file__).parent / "static"
 REQUIRED_FILES = ("config.json", "transformer.safetensors", "vae.safetensors")
@@ -203,6 +204,12 @@ async def add_no_cache(request, call_next):
 async def startup():
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
     UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+    # Continue the run counter past existing outputs so a restart never overwrites them.
+    global _output_counter
+    for f in OUTPUT_DIR.glob("*_seedvr_s*_*.png"):
+        n = f.stem.rsplit("_", 1)[-1]
+        if n.isdigit():
+            _output_counter = max(_output_counter, int(n))
     # Uploaded source images are transient — wipe them on every startup.
     for f in UPLOAD_DIR.iterdir():
         if f.is_file():
@@ -392,10 +399,17 @@ async def upscale(
         after = result.image.convert("RGB")
         after.save(out_path)
 
+        # Keep the source next to the result so the Library can compare it later
+        # (uploads/ is wiped on every startup).
+        ORIGINALS_DIR.mkdir(parents=True, exist_ok=True)
+        original_path = ORIGINALS_DIR / f"{out_path.stem}_original{suffix}"
+        original_path.write_bytes(content)
+
         # Run metadata as a sidecar JSON next to the image (keeps the PNG clean).
         meta = {
             "software": "SeedVR2 MLX",
             "image": out_path.name,
+            "source": {"name": file.filename or "image", "original": original_path.name},
             "model": {
                 "label": MODELS[model]["label"],
                 "slug": model,
@@ -417,18 +431,7 @@ async def upscale(
             "generation_time_s": round(elapsed, 1),
         }
         out_path.with_suffix(".json").write_text(json.dumps(meta, indent=2))
-
-        # For the compare view: serve the original upload directly (no extra file).
-        before_name = upload_path.name
-        return {
-            "filename": out_path.name,
-            "width": after.width,
-            "height": after.height,
-            "elapsed": round(elapsed, 1),
-            "before_url": f"/api/download/{before_name}",
-            "after_url": f"/api/download/{out_path.name}",
-            "download_url": f"/api/download/{out_path.name}",
-        }
+        return library_entry(out_path)
     finally:
         mx.clear_cache()
 
@@ -436,12 +439,53 @@ async def upscale(
 @app.get("/api/download/{filename}")
 async def download(filename: str):
     """Serve a saved file (output or upload) for download/viewing."""
-    path = OUTPUT_DIR / filename
-    if not path.exists():
-        path = UPLOAD_DIR / filename
-    if not path.exists():
+    if "/" in filename or "\\" in filename or filename in (".", ".."):
         raise HTTPException(404, "File not found")
-    return FileResponse(path, media_type="image/png", filename=filename)
+    for d in (OUTPUT_DIR, ORIGINALS_DIR, UPLOAD_DIR):
+        path = d / filename
+        if path.is_file():
+            return FileResponse(path, filename=filename)
+    raise HTTPException(404, "File not found")
+
+
+def library_entry(png: Path) -> dict:
+    """Describe one saved result (from its sidecar JSON, when present) for the Library."""
+    try:
+        meta = json.loads(png.with_suffix(".json").read_text())
+    except (OSError, ValueError):
+        meta = {}
+    settings = meta.get("settings", {})
+    source = meta.get("source", {})
+    scale = str(settings.get("scale", ""))
+    original = source.get("original")
+    if not (original and (ORIGINALS_DIR / original).is_file()):
+        original = None
+    if "width" in meta.get("resolution", {}):
+        width, height = meta["resolution"]["width"], meta["resolution"]["height"]
+    else:
+        with Image.open(png) as im:
+            width, height = im.size
+    url = f"/api/download/{png.name}"
+    return {
+        "filename": png.name,
+        # Older results have no recorded source name; strip the _seedvr_s<seed>_<n> suffix.
+        "sourceName": source.get("name") or png.stem.split("_seedvr_s")[0],
+        "width": width,
+        "height": height,
+        "elapsed": meta.get("generation_time_s"),
+        "scale": scale.replace("x", "×") if scale.endswith("x") else (f"{scale} px" if scale else ""),
+        "model": meta.get("model", {}).get("label", "").replace(" · recommended", ""),
+        "before_url": f"/api/download/{original}" if original else None,
+        "after_url": url,
+        "download_url": url,
+    }
+
+
+@app.get("/api/library")
+async def list_library():
+    """All saved results in outputs/, newest first."""
+    pngs = sorted(OUTPUT_DIR.glob("*.png"), key=lambda p: p.stat().st_mtime, reverse=True)
+    return {"items": [library_entry(p) for p in pngs]}
 
 
 @app.post("/api/download_all")
@@ -474,10 +518,10 @@ async def download_all(files: list = Body(..., embed=True)):
 
 @app.get("/api/outputs")
 async def outputs_info():
-    """Total size + file count of the outputs folder (results + sidecar JSONs)."""
+    """Total size + file count of the outputs folder (results, sidecar JSONs, originals)."""
     total = 0
     count = 0
-    for f in OUTPUT_DIR.iterdir():
+    for f in OUTPUT_DIR.rglob("*"):
         if f.is_file():
             total += f.stat().st_size
             count += 1
@@ -489,7 +533,7 @@ async def outputs_clear():
     """Delete every file in outputs/ (all sessions, not just the current one)."""
     deleted = 0
     freed = 0
-    for f in OUTPUT_DIR.iterdir():
+    for f in OUTPUT_DIR.rglob("*"):
         if f.is_file():
             freed += f.stat().st_size
             f.unlink()

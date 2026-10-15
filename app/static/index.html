@@ -125,8 +125,9 @@
       <div id="result-status" class="status">👆 Upload an image and click <b>Upscale</b>.</div>
 
       <div class="tabs" id="result-tabs" style="display:none">
-        <button type="button" onclick="switchTab('result')" class="tab active" data-tab="result">Result</button>
-        <button type="button" onclick="switchTab('compare')" class="tab" data-tab="compare">Compare</button>
+        <!-- Result / Compare appear once there's an image to show (see showResultTabs) -->
+        <button type="button" onclick="switchTab('result')" class="tab active" data-tab="result" style="display:none">Result</button>
+        <button type="button" onclick="switchTab('compare')" class="tab" data-tab="compare" style="display:none">Compare</button>
         <button type="button" onclick="switchTab('library')" class="tab" data-tab="library">Library</button>
       </div>
 
@@ -165,8 +166,8 @@
             <button type="button" id="clear-outputs-btn" class="btn danger" disabled>🗑 Clear</button>
           </div>
         </div>
-        <small class="hint">⚠️ <b>Clear</b> deletes <b>all</b> files in app/outputs/ — every saved result from every session, not just this session's library.</small>
-        <div id="library-empty" class="library-empty">No images processed yet this session.</div>
+        <small class="hint">⚠️ <b>Clear</b> deletes <b>all</b> files in app/outputs/ — every saved result in the Library, plus its original.</small>
+        <div id="library-empty" class="library-empty">No saved results yet.</div>
         <div id="library-grid" class="library-grid"></div>
       </div>
 

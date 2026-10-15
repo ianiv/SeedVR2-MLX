@@ -30,7 +30,7 @@ low-resolution image it produces a sharp, high-resolution result in **one denois
 - Controls **Metal memory usage** — an auto limit derived from your RAM by default, or a manual cap you pick in the UI
 - Shows the result in an interactive **before/after slider** (drag, scroll to zoom, double-click to reset) and offers a PNG download
 - Library tab, for multiple/batch import generations viewing.
-- Saves every result to `app/outputs/` with a **sidecar `.json`** recording the full run (model, settings, tiling, memory limit, generation time)
+- Saves every result to `app/outputs/` with a **sidecar `.json`** recording the full run (model, settings, tiling, memory limit, generation time), plus a copy of the original in `app/outputs/originals/` so past results can be reopened and compared from the Library
 
 ### Model variants
 
@@ -185,8 +185,9 @@ Assume the server is running at `http://127.0.0.1:7860` (adjust the port).
 | `/api/system` | GET | — | `ram_gb`, current + auto `mem_limit_gb`, `mode` |
 | `/api/memlimit` | POST | JSON: `{"gb": 12}` | `{"mem_limit_gb": 12}` |
 | `/api/upscale` | POST | multipart (below) | `filename`, `width`, `height`, `elapsed`, before/after/download URLs |
-| `/api/download/{filename}` | GET | — | the file (from `outputs/` or `uploads/`) |
+| `/api/download/{filename}` | GET | — | the file (from `outputs/`, `outputs/originals/` or `uploads/`) |
 | `/api/download_all` | POST | JSON: `{"files": ["a.png", ...]}` | a `.zip` of the given `outputs/` files |
+| `/api/library` | GET | — | `items`: every saved result, newest first (`filename`, `sourceName`, size, settings, `before_url`/`after_url`) |
 | `/api/outputs` | GET | — | `size_bytes` + `count` of the outputs folder |
 | `/api/outputs/clear` | POST | — | deletes **all** `outputs/` files; returns `deleted` + `freed_bytes` |
 
@@ -277,6 +278,7 @@ curl -s -X POST http://127.0.0.1:7860/api/download_all \
 │   ├── models/             # downloaded weights, per variant
 │   ├── uploads/            # uploaded images (auto-deleted on app start)
 │   └── outputs/            # generated results + sidecar .json metadata
+│       └── originals/      # source image for each result (for Library compare)
 ├── install.js  start.js  reset.js  update.js
 ├── setup.sh  run.sh     # standalone install / launch (no Pinokio)
 ├── pinokio.js  pinokio.json

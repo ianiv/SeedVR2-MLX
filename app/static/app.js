@@ -4,7 +4,7 @@ const $ = (s) => document.querySelector(s);
 
 // --- State ---
 let uploadedFiles = [];  // [{ file, url }] — the batch queue
-let library = [];        // completed runs this session, newest first
+let library = [];        // saved results in outputs/ (all sessions), newest first
 let batching = false;
 let modelLoaded = false;
 
@@ -19,6 +19,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   setupTargetSync();
   setupRangeFill();
   setupMemLimit();
+  loadLibrary();
 
   $("#load-btn").addEventListener("click", loadModel);
   $("#upscale-btn").addEventListener("click", doUpscale);
@@ -518,14 +519,6 @@ async function doUpscale() {
   const progressText = $("#progress-text");
   const statusEl = $("#result-status");
 
-  // Snapshot the settings once, so every run in the batch is identical.
-  const cfg = {
-    scale: $("#scale-mode").value === "factor"
-      ? `${parseFloat($("#scale-factor").value)}×`
-      : `${$("#target-px-num").value || $("#target-px").value} px`,
-    model: ($("#model-select").selectedOptions[0]?.textContent || "").replace(" · recommended", ""),
-  };
-
   progress.style.display = "flex";
   progressFill.style.width = "0%";
 
@@ -587,7 +580,7 @@ async function doUpscale() {
       lastData = data;
       prevElapsed = data.elapsed;
       prevInPx = px;
-      library.unshift({ ...data, sourceName: f.name, scale: cfg.scale, model: cfg.model });
+      library.unshift(data);
       renderLibrary();
       showResult(data);
       // First result: surface the Result pane so progress is visible live.
@@ -661,17 +654,40 @@ function showResult(data) {
   $("#cmp-handle").style.left = "50%";
   resetZoom();
 
-  $("#result-tabs").style.display = "flex";
+  showResultTabs();
 }
 
-// --- Library (session-only: empty on load, fed by every completed run) ---
+// Reveal the tab bar plus the Result / Compare tabs (hidden until an image is shown).
+function showResultTabs() {
+  $("#result-tabs").style.display = "flex";
+  document.querySelectorAll('[data-tab="result"], [data-tab="compare"]').forEach((b) => b.style.display = "");
+}
+
+// --- Library (every saved result in outputs/, newest first) ---
+async function loadLibrary() {
+  try {
+    const res = await fetch("/api/library");
+    if (!res.ok) return;
+    library = (await res.json()).items;
+    renderLibrary();
+    // On a fresh page, open the Library so saved results are reachable right away
+    // (unless a run has already put something in the Result view).
+    if (library.length && $("#result-tabs").style.display === "none") {
+      $("#result-tabs").style.display = "flex";
+      switchTab("library");
+    }
+  } catch (e) {
+    console.error("Failed to load library:", e);
+  }
+}
+
 function renderLibrary() {
   const grid = $("#library-grid");
   $("#library-empty").style.display = library.length ? "none" : "";
   const countEl = $("#library-count");
   const dlAll = $("#download-all-btn");
   countEl.textContent = library.length
-    ? `${library.length} image${library.length > 1 ? "s" : ""} this session`
+    ? `${library.length} image${library.length > 1 ? "s" : ""}`
     : "";
   dlAll.disabled = !library.length || dlAll.dataset.busy === "1";
   if (dlAll.dataset.busy !== "1") {
@@ -681,14 +697,14 @@ function renderLibrary() {
   }
   grid.innerHTML = library
     .map((r, i) => `
-      <div class="lib-card" onclick="libraryCompare(${i})" title="Click to compare">
+      <div class="lib-card" onclick="libraryCompare(${i})" title="${r.before_url ? "Click to compare" : "Click to view (original not saved)"}">
         <img src="${r.after_url}" loading="lazy" alt="">
         <div class="lib-meta">
           <span class="lib-name">${esc(r.sourceName)}</span>
-          <span class="lib-sub">${r.width}×${r.height} · ${r.elapsed}s</span>
+          <span class="lib-sub">${r.width}×${r.height}${r.elapsed != null ? ` · ${r.elapsed}s` : ""}</span>
           <span class="lib-sub">${esc(r.scale || "")} · ${esc(r.model || "")}</span>
           <div class="lib-actions" onclick="event.stopPropagation()">
-            <button type="button" class="btn icon" onclick="libraryCompare(${i})" title="Compare">↔️</button>
+            ${r.before_url ? `<button type="button" class="btn icon" onclick="libraryCompare(${i})" title="Compare">↔️</button>` : ""}
             <a class="btn icon" href="${r.download_url}" download="${esc(r.filename)}" title="Download">⬇️</a>
           </div>
         </div>
@@ -701,7 +717,8 @@ function renderLibrary() {
 function libraryCompare(i) {
   const r = library[i];
   if (!r) return;
-  $("#cmp-before").src = r.before_url;
+  // Results from before originals were kept can't be compared — show the result instead.
+  $("#cmp-before").src = r.before_url || r.after_url;
   $("#cmp-after").src = r.after_url;
   $("#cmp-range").value = 50;
   $("#cmp-after").style.clipPath = "inset(0 50% 0 0)";
@@ -710,7 +727,8 @@ function libraryCompare(i) {
   $("#output-img").src = r.after_url;
   $("#download-link").href = r.download_url;
   $("#download-link").download = r.filename;
-  switchTab("compare");
+  showResultTabs();
+  switchTab(r.before_url ? "compare" : "result");
 }
 
 // Zip the whole session's results into one download (server-side).
@@ -779,7 +797,7 @@ async function clearOutputs() {
   const statusEl = $("#result-status");
   if (!confirm(
     "Delete ALL files in app/outputs/?\n\n" +
-    "This removes every saved result (from ALL sessions), not just this session's library."
+    "This removes every saved result and its original from the Library."
   )) return;
 
   const orig = btn.textContent;
