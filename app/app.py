@@ -171,6 +171,19 @@ def model_is_downloaded(slug: str) -> bool:
     return all((d / f).exists() for f in REQUIRED_FILES)
 
 
+# Last successfully loaded model, persisted so the UI can preselect it after a
+# restart. Lives in models/ so Reset (which deletes models/) clears it too.
+LAST_MODEL_FILE = MODELS_DIR / "last_model.txt"
+
+
+def last_used_model() -> str:
+    try:
+        slug = LAST_MODEL_FILE.read_text().strip()
+    except OSError:
+        return DEFAULT_MODEL
+    return slug if slug in MODELS else DEFAULT_MODEL
+
+
 # --------------------------------------------------------------------------- #
 # FastAPI app
 # --------------------------------------------------------------------------- #
@@ -210,7 +223,12 @@ async def list_models():
             "downloaded": model_is_downloaded(slug),
             "loaded": _model_state["slug"] == slug,
         })
-    return {"models": models, "current": _model_state["slug"], "status": _model_state["status"]}
+    return {
+        "models": models,
+        "current": _model_state["slug"],
+        "last": last_used_model(),
+        "status": _model_state["status"],
+    }
 
 
 @app.post("/api/models/load")
@@ -264,6 +282,10 @@ async def load_model(slug: str = Form(...)):
         _model_state["ref"] = inst
         _model_state["slug"] = slug
         _model_state["status"] = "ready"
+        try:
+            LAST_MODEL_FILE.write_text(slug)
+        except OSError as e:
+            print(f"Could not save last-used model: {e}")
 
     return {"status": "ready", "label": MODELS[slug]["label"]}
 

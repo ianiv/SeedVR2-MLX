@@ -64,6 +64,8 @@ async function loadModels() {
       opt.textContent = m.label + (m.downloaded ? "" : " (not downloaded)") + (m.loaded ? " ✓" : "");
       select.appendChild(opt);
     }
+    // Restore the loaded model, else the last one used (server falls back to the default).
+    select.value = data.current || data.last;
     modelLoaded = data.status === "ready";
     updateUpscaleBtn();
   } catch (e) {
