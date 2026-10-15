@@ -119,6 +119,55 @@ function setupDropzone() {
     dz.classList.remove("dragover");
     addFiles([...e.dataTransfer.files].filter((f) => f.type.startsWith("image/")));
   });
+
+  // Paste: button (async Clipboard API) and ⌘V / Ctrl+V anywhere on the page.
+  $("#paste-btn").addEventListener("click", pasteFromClipboard);
+  document.addEventListener("paste", (e) => {
+    // Leave normal text pasting into form fields alone.
+    if (e.target.closest("input, textarea, select, [contenteditable]")) return;
+    const files = [...e.clipboardData.items]
+      .filter((it) => it.kind === "file" && it.type.startsWith("image/"))
+      .map((it) => it.getAsFile());
+    if (!files.length) return;
+    e.preventDefault();
+    addPastedBlobs(files);
+  });
+}
+
+async function pasteFromClipboard() {
+  const status = $("#paste-status");
+  status.textContent = "";
+  status.className = "status";
+  if (!navigator.clipboard?.read) {
+    status.textContent = "This browser can't read the clipboard from a button — press ⌘V instead.";
+    return;
+  }
+  try {
+    const blobs = [];
+    for (const item of await navigator.clipboard.read()) {
+      const type = item.types.find((t) => t.startsWith("image/"));
+      if (type) blobs.push(await item.getType(type));
+    }
+    if (!blobs.length) {
+      status.textContent = "No image on the clipboard.";
+      return;
+    }
+    addPastedBlobs(blobs);
+  } catch (err) {
+    status.textContent = `Couldn't read the clipboard (${err.message || err.name}) — try ⌘V.`;
+  }
+}
+
+// Clipboard images arrive unnamed (or all as "image.png"); give each a unique name
+// so outputs get distinct filenames and the duplicate check in addFiles still works.
+function addPastedBlobs(blobs) {
+  const stamp = new Date().toISOString().replace(/\D/g, "").slice(0, 14);
+  addFiles(blobs.map((b, i) => {
+    const ext = (b.type.split("/")[1] || "png").replace("jpeg", "jpg");
+    const suffix = blobs.length > 1 ? `_${i + 1}` : "";
+    return new File([b], `pasted_${stamp}${suffix}.${ext}`, { type: b.type });
+  }));
+  $("#paste-status").textContent = "";
 }
 
 // Global for inline onclick handlers.

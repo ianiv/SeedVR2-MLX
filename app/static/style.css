@@ -246,6 +246,7 @@ input[type="range"]:hover::-moz-range-thumb {
 /* Status */
 .status { font-size: 0.82rem; color: var(--text-dim); line-height: 1.4; overflow-wrap: anywhere; }
 .status.ok { color: var(--success); }
+#paste-status:empty { display: none; }
 
 /* --- Results --- */
 .results {
