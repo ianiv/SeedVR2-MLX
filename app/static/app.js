@@ -6,7 +6,9 @@ const $ = (s) => document.querySelector(s);
 let uploadedFiles = [];  // [{ file, url }] — the batch queue
 let library = [];        // saved results in outputs/ (all sessions), newest first
 let batching = false;
-let modelLoaded = false;
+let loadedModel = null;  // slug currently loaded on the server (null = none)
+let modelLoading = false;
+let modelInfo = {};      // slug -> { label, downloaded, ... } from /api/models
 
 // --- Init ---
 document.addEventListener("DOMContentLoaded", async () => {
@@ -23,6 +25,7 @@ document.addEventListener("DOMContentLoaded", async () => {
 
   $("#load-btn").addEventListener("click", loadModel);
   $("#upscale-btn").addEventListener("click", doUpscale);
+  $("#model-select").addEventListener("change", updateUpscaleBtn);
   $("#download-all-btn").addEventListener("click", downloadAll);
   $("#clear-outputs-btn").addEventListener("click", clearOutputs);
   refreshOutputsSize();
@@ -81,20 +84,25 @@ async function loadModels() {
     }
     // Restore the loaded model, else the last one used (server falls back to the default).
     select.value = data.current || data.last;
-    modelLoaded = data.status === "ready";
+    modelInfo = Object.fromEntries(data.models.map((m) => [m.slug, m]));
+    loadedModel = data.status === "ready" ? data.current : null;
     updateUpscaleBtn();
   } catch (e) {
     console.error("Failed to load models:", e);
   }
 }
 
+// Load the selected model. Returns true on success. Only one load at a time —
+// the server serialises loads, so a second concurrent request would just wait.
 async function loadModel() {
+  if (modelLoading) return false;
   const slug = $("#model-select").value;
   const statusEl = $("#model-status");
   statusEl.textContent = "⬇️ Downloading / loading…";
   statusEl.className = "status";
+  modelLoading = true;
   $("#load-btn").disabled = true;
-  $("#upscale-btn").disabled = true;
+  updateUpscaleBtn();
 
   try {
     const form = new FormData();
@@ -104,11 +112,15 @@ async function loadModel() {
     const data = await res.json();
     statusEl.textContent = `✅ Model ready: ${data.label}`;
     statusEl.className = "status ok";
-    modelLoaded = true;
+    loadedModel = slug;
+    if (modelInfo[slug]) modelInfo[slug].downloaded = true;
+    return true;
   } catch (e) {
     statusEl.textContent = `❌ ${e.message}`;
     statusEl.className = "status";
+    return false;
   } finally {
+    modelLoading = false;
     $("#load-btn").disabled = false;
     updateUpscaleBtn();
   }
@@ -225,8 +237,13 @@ function renderThumbs() {
 function updateUpscaleBtn() {
   const n = uploadedFiles.length;
   const btn = $("#upscale-btn");
-  btn.disabled = !(n && modelLoaded) || batching;
-  btn.textContent = n > 1 ? `🚀 Upscale (${n})` : "🚀 Upscale";
+  btn.disabled = !n || batching || modelLoading;
+  // Upscale loads the selected model first when it isn't the one loaded.
+  const slug = $("#model-select").value;
+  const label = slug === loadedModel ? "🚀 Upscale"
+    : modelInfo[slug]?.downloaded === false ? "⬇️ Download model & Upscale"
+    : "🚀 Load model & Upscale";
+  btn.textContent = n > 1 ? `${label} (${n})` : label;
 }
 
 // --- Comparison slider + zoom (integrated) ---
@@ -522,7 +539,18 @@ function setupTargetSync() {
 // Runs every queued file through /api/upscale SEQUENTIALLY — the MLX worker
 // thread serializes GPU work anyway, so parallel requests would only pile up.
 async function doUpscale() {
-  if (!uploadedFiles.length || batching) return;
+  if (!uploadedFiles.length || batching || modelLoading) return;
+
+  // Load (downloading if needed) the selected model first if it isn't the loaded one.
+  if ($("#model-select").value !== loadedModel) {
+    const statusEl = $("#result-status");
+    statusEl.textContent = "⬇️ Loading model before upscaling…";
+    statusEl.className = "status";
+    if (!(await loadModel())) {
+      statusEl.textContent = "❌ Couldn't load the model — see the Model section.";
+      return;
+    }
+  }
 
   const items = [...uploadedFiles];
   batching = true;
@@ -642,7 +670,7 @@ async function upscaleOne(file) {
   if ($("#random-seed").checked) randomizeSeed();
   const form = new FormData();
   form.append("file", file);
-  form.append("model", $("#model-select").value);
+  form.append("model", loadedModel);
   form.append("scale_mode", $("#scale-mode").value);
   form.append("scale_factor", $("#scale-factor").value);
   form.append("target_px", $("#target-px-num").value || $("#target-px").value);
