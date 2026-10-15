@@ -75,6 +75,24 @@ install is fast. Only one model is held in memory at a time.
 4. **Click Install:** Installs all files, dependencies, selected MLX models will be downloaded during first generation (~9 to ~16 GB)
 5. **Click Start:** Launches the web UI
 
+## 🛠️ Installation (Manual, without Pinokio)
+
+Requires an Apple Silicon Mac. `setup.sh` installs [uv](https://docs.astral.sh/uv/) if it's missing, then creates `app/env` with Python 3.12 and the dependencies.
+
+```bash
+git clone https://github.com/Rdx-ai-art/seedvr2-mlx.pinokio.git
+cd seedvr2-mlx.pinokio
+./setup.sh     # install / update dependencies
+./run.sh       # start the server and open the web UI
+```
+
+- `./run.sh --port 8000` picks a port (default 7860; falls back to a free port if taken).
+- `SEEDVR2_MEM_LIMIT_GB=12 ./run.sh` caps Metal memory (see Memory management).
+- **Update:** `git pull && ./setup.sh`
+- **Reset:** `rm -rf app/env app/models app/outputs`
+
+Pinokio and manual installs share the same `app/env`, so you can use either.
+
 ## 📸 Screenshots
 ![start page](screenshots/start.png)
 
@@ -260,6 +278,7 @@ curl -s -X POST http://127.0.0.1:7860/api/download_all \
 │   ├── uploads/            # uploaded images (auto-deleted on app start)
 │   └── outputs/            # generated results + sidecar .json metadata
 ├── install.js  start.js  reset.js  update.js
+├── setup.sh  run.sh     # standalone install / launch (no Pinokio)
 ├── pinokio.js  pinokio.json
 ├── README.md   .gitignore
 └── icon.png

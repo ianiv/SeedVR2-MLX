@@ -488,7 +488,23 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--port", type=int, default=int(os.environ.get("PORT", 7860)))
     parser.add_argument("--host", type=str, default="127.0.0.1")
+    parser.add_argument("--open", action="store_true", help="open the web UI in the default browser")
     args = parser.parse_args()
 
-    print(f" http://{args.host}:{args.port}")
+    # Fall back to a free port if the requested one is taken (standalone runs;
+    # Pinokio already passes a free {{port}}).
+    import socket
+    with socket.socket() as s:
+        try:
+            s.bind((args.host, args.port))
+        except OSError:
+            s.bind((args.host, 0))
+            print(f"Port {args.port} is in use, using {s.getsockname()[1]} instead", flush=True)
+            args.port = s.getsockname()[1]
+
+    url = f"http://{args.host}:{args.port}"
+    print(f" {url}", flush=True)
+    if args.open:
+        import webbrowser
+        threading.Timer(1.5, webbrowser.open, args=(url,)).start()
     uvicorn.run(app, host=args.host, port=args.port, log_level="warning")
