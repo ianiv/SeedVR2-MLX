@@ -48,14 +48,14 @@ body {
 
 .layout {
   display: grid;
-  grid-template-columns: 320px 1fr;
+  grid-template-columns: 320px minmax(0, 1fr);
   gap: 20px;
   max-width: 1400px;
   margin: 0 auto;
 }
 
 @media (max-width: 800px) {
-  .layout { grid-template-columns: 1fr; }
+  .layout { grid-template-columns: minmax(0, 1fr); }
 }
 
 /* --- Glass panels --- */
@@ -244,7 +244,7 @@ input[type="range"]:hover::-moz-range-thumb {
 .dz-remove:hover { background: #ef4444; }
 
 /* Status */
-.status { font-size: 0.82rem; color: var(--text-dim); line-height: 1.4; }
+.status { font-size: 0.82rem; color: var(--text-dim); line-height: 1.4; overflow-wrap: anywhere; }
 .status.ok { color: var(--success); }
 
 /* --- Results --- */
