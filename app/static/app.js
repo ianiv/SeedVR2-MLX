@@ -26,8 +26,22 @@ document.addEventListener("DOMContentLoaded", async () => {
   $("#download-all-btn").addEventListener("click", downloadAll);
   $("#clear-outputs-btn").addEventListener("click", clearOutputs);
   refreshOutputsSize();
-  $("#rand-seed").addEventListener("click", () => {
-    $("#seed").value = Math.floor(Math.random() * 1000000);
+  $("#rand-seed").addEventListener("click", randomizeSeed);
+  // "Random seed every run" (on by default; the choice is remembered in this browser).
+  // While on, the seed field just shows the last seed used, so it and 🎲 are disabled.
+  const randomSeed = $("#random-seed");
+  const syncSeedControls = () => {
+    $("#seed").disabled = randomSeed.checked;
+    $("#rand-seed").disabled = randomSeed.checked;
+  };
+  try {
+    const saved = localStorage.getItem("seedvr2.randomSeed");
+    if (saved !== null) randomSeed.checked = saved === "1";
+  } catch (e) {}
+  syncSeedControls();
+  randomSeed.addEventListener("change", () => {
+    syncSeedControls();
+    try { localStorage.setItem("seedvr2.randomSeed", randomSeed.checked ? "1" : "0"); } catch (e) {}
   });
   $("#scale-mode").addEventListener("change", (e) => {
     const isFactor = e.target.value === "factor";
@@ -618,8 +632,14 @@ async function doUpscale() {
   setTimeout(() => { progress.style.display = "none"; progressFill.style.width = "0%"; }, 800);
 }
 
+function randomizeSeed() {
+  $("#seed").value = Math.floor(Math.random() * 1000000);
+}
+
 // One file through the API. Throws on failure.
 async function upscaleOne(file) {
+  // A fresh seed per generation (each image in a batch too); the field shows the one used.
+  if ($("#random-seed").checked) randomizeSeed();
   const form = new FormData();
   form.append("file", file);
   form.append("model", $("#model-select").value);

@@ -80,6 +80,7 @@ body {
 }
 
 .row { display: flex; gap: 8px; align-items: center; }
+.row.bottom { align-items: flex-end; } /* label above the input: line up with the input, not the label */
 .grow { flex: 1; }
 
 .field { display: flex; flex-direction: column; gap: 6px; font-size: 0.82rem; color: var(--text-dim); }
@@ -95,6 +96,7 @@ body {
   width: 100%;
   transition: border-color 0.2s, box-shadow 0.2s, background 0.2s;
 }
+.input:disabled { opacity: 0.5; cursor: not-allowed; }
 .input:focus, select.input:focus {
   outline: none;
   border-color: rgba(99, 102, 241, 0.55);

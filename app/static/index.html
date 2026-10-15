@@ -85,13 +85,16 @@
             <small class="hint">Adds controlled variation to the encoded latent. Can reduce certain artifacts. 0 = off.</small>
           </label>
         </div>
-        <div class="row">
+        <div class="row bottom">
           <label class="field grow">
             <span>Seed</span>
             <input type="number" id="seed" class="input" min="0" max="999999" value="42">
           </label>
-	   <button id="rand-seed" class="btn icon" title="Random seed">🎲</button>
+          <button id="rand-seed" class="btn icon" title="Random seed">🎲</button>
         </div>
+        <label class="check">
+          <input type="checkbox" id="random-seed" checked> Random seed every run
+        </label>
       </section>
 
       <section class="group collapsible">
